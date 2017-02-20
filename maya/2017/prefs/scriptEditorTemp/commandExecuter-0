@@ -1,0 +1,4 @@
+import maya.cmds as cmds
+try: cmds.commandPort(name="127.0.0.1:6000", close=True, echoOutput=True)
+except:    pass
+cmds.commandPort(name="127.0.0.1:6000", echoOutput=True)

@@ -1,0 +1,31 @@
+savePose();
+global proc savePose()
+{
+    string $storeCmd = "";
+    // Get the selected pose
+    string $selectedPose[] = `ls -sl`;
+
+    // Check if user has something selected
+    if (size($selectedPose) < 1)
+    {
+        warning "Nothing selected";
+    }
+    else
+    {
+        print $selectedPose;
+        for ($all in $selectedPose)
+        {
+            // Store all keyable, readble, writeable, connectable and unlocked channels
+            string $keyable[] = `listAttr -k $all`; //-r -w -c -u $all`;
+            //print $keyable;
+            for ($values in $keyable)
+            {
+                float $findValue = `getAttr ($all + "." + $values)`; 
+                string $saveToShelf = "setAttr " + ($all + "." + $values) + " " + $findValue + ";\n";
+                print $saveToShelf;
+                //$storeCmd += $saveToShelf;
+                //print $storeCmd;
+            }
+        }
+    }
+}
