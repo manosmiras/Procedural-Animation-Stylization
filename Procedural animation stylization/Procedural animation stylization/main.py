@@ -34,9 +34,10 @@ def SavePoseButtonPush(*args):
             #cmds.columnLayout( adjustableColumn=True )
             #cmds.frameLayout( label='Pose at frame: ' + str(cmds.currentTime( query=True )), labelAlign='top', borderStyle='in' )
             #cmds.columnLayout()
-            keyable = cmds.listAttr(cmds.ls(sl=1), k=True)  
+
+            keyable = cmds.listAttr(cmds.ls(sl=1), k=True)
             for i in range(0, len(keyable)):
-                cmds.text(label=keyable[i])
+                cmds.checkBox( label=keyable[i] )
                 cmds.textField(keyable[i] +"_"+ str(int(cmds.currentTime( query=True ))))
                 cmds.textField(keyable[i] +"_"+ str(int(cmds.currentTime( query=True ))), edit = True, enable = False, text = str(cmds.getAttr(cmds.ls(sl=1)[0] + "." + keyable[i])))
 
@@ -50,8 +51,20 @@ def CartoonifyButtonPush(*args):
     #print(cmds.currentTime( query=True ))
     #Selects all the keys in the graph editor
     #cmds.selectKey( cmds.ls(sl=1), time=())
+    #cmds.findKeyframe( timeSlider=True, which="next" )
+    #cmds.keyTangent(cmds.ls(sl=1), edit = True, iw = 10)
+    currentKeyFrame = cmds.currentTime( query=True )
+    next = cmds.findKeyframe( timeSlider=True, which="next")
+    previous = cmds.findKeyframe( timeSlider=True, which="previous")
+    # Set the inWeights and outWeights of the pose to 0
+    valueFromSlider = cmds.floatSliderGrp('float', query=True, value = 1)
+    print(cmds.keyTangent(cmds.ls(sl=1), edit = True, time = (previous, next), attribute = 'translateY', outWeight = valueFromSlider * 10))
+    print(cmds.keyTangent(cmds.ls(sl=1), edit = True, time = (previous, next), attribute = 'translateY', inWeight = valueFromSlider * 10))
+    cmds.keyTangent(cmds.ls(sl=1), edit = True, time = (currentKeyFrame, currentKeyFrame), attribute = 'translateY', itt = 'flat', ott = 'flat')
+    #if valueFromSlider==1.0:
+        
+    
 
-    cmds.keyTangent(cmds.ls(sl=1), edit = True, iw = 10)
 
 def ResetButtonPush(*args):
     print("Resetting the values")
@@ -70,6 +83,7 @@ cmds.columnLayout( adjustableColumn=True )
 cmds.button( label='Save Pose', command=SavePoseButtonPush)
 # Add a button
 cmds.button( label='Cartoonify', command=CartoonifyButtonPush)
+cmds.floatSliderGrp('float', label='Cartoonification Value', field=True, minValue=0.0, maxValue=1.0, fieldMinValue=0.0, fieldMaxValue=1.0, value=0.5 )
 # Add a button
 cmds.button( label='Reset', command=ResetButtonPush)
 
