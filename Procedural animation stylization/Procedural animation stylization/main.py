@@ -1,7 +1,16 @@
 import maya.cmds as cmds
 import maya.mel as mel
+import math
 initIW = []
 framesPosed = []
+
+# https://www.desmos.com/calculator/hamwkcp1rh
+def calculatePos(x, n):
+    position = math.pow((1 - math.cos(x)), n)
+    #position = math.pow(math.cos(x), n)
+    #position = math.pow(1 - math.cos(math.pi/2 - x), n)
+    return position
+
 def SavePoseButtonPush(*args):
     
     # This is the initial inWeight of each Key Tangent
@@ -53,18 +62,6 @@ def CartoonifyButtonPush(*args):
     #cmds.selectKey( cmds.ls(sl=1), time=())
     #cmds.findKeyframe( timeSlider=True, which="next" )
     #cmds.keyTangent(cmds.ls(sl=1), edit = True, iw = 10)
-    currentKeyFrame = cmds.currentTime( query=True )
-    next = cmds.findKeyframe( timeSlider=True, which="next")
-    previous = cmds.findKeyframe( timeSlider=True, which="previous")
-    # Set the inWeights and outWeights of the pose to 0
-    valueFromSlider = cmds.floatSliderGrp('float', query=True, value = 1)
-    print(cmds.keyTangent(cmds.ls(sl=1), edit = True, time = (previous, next), attribute = 'translateY', outWeight = valueFromSlider * 10))
-    print(cmds.keyTangent(cmds.ls(sl=1), edit = True, time = (previous, next), attribute = 'translateY', inWeight = valueFromSlider * 10))
-    cmds.keyTangent(cmds.ls(sl=1), edit = True, time = (currentKeyFrame, currentKeyFrame), attribute = 'translateY', itt = 'flat', ott = 'flat')
-    #if valueFromSlider==1.0:
-        
-    
-
 
 def ResetButtonPush(*args):
     print("Resetting the values")
@@ -72,7 +69,33 @@ def ResetButtonPush(*args):
     for i in range(len(initIW)):
         print(i)
         cmds.keyTangent(cmds.ls(sl=1), edit = True, index = (i, i), iw = float(initIW[i]))
-    
+
+def slider_drag_callback(*args):
+    print("Slider Dragged")
+    global framesPosed
+    print(framesPosed)
+    currentKeyFrame = framesPosed[0] #cmds.currentTime( query=True )
+
+    next = cmds.findKeyframe(cmds.ls(sl=1), time=(framesPosed[0],framesPosed[0]), which="next")
+    #previous = cmds.findKeyframe(cmds.ls(sl=1), time=(framesPosed[0],framesPosed[0]), which="previous")
+    #key1 = 0
+    #if (len(framesPosed) > 0):
+    #key1 = 20 #(currentKeyFrame + next) / 2
+    #key2 = 22
+    key3 = 24
+
+    #print("key1 is: " + str(key1))
+    # Set the inWeights and outWeights of the pose to 0
+    valueFromSlider = cmds.floatSliderGrp('float', query=True, value = 1)
+    #print(calculatePos(key1, valueFromSlider))
+    #cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=calculatePos(key1, valueFromSlider), t = (key1, key1), itt = "spline", ott = "spline" )
+    #cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=calculatePos(key2, valueFromSlider), t = (key2, key2), itt = "spline", ott = "spline" )
+    cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=calculatePos(key3, valueFromSlider), t = (key3, key3), itt = "spline", ott = "spline" )
+    #cmds.setAttr()
+    #cmds.keyTangent(cmds.ls(sl=1), edit = True, time = (previous, next), attribute = 'translateY', outWeight = valueFromSlider * 10)
+    #cmds.keyTangent(cmds.ls(sl=1), edit = True, time = (previous, next), attribute = 'translateY', inWeight = valueFromSlider * 10)
+    #cmds.keyTangent(cmds.ls(sl=1), edit = True, time = (currentKeyFrame, currentKeyFrame), attribute = 'translateY', itt = 'flat', ott = 'flat')
+    #if valueFromSlider==1.0:
 
 # Make a new window
 window = cmds.window( title="Animation Stylization", iconName='Short Name', widthHeight=(500, 500) )
@@ -83,11 +106,9 @@ cmds.columnLayout( adjustableColumn=True )
 cmds.button( label='Save Pose', command=SavePoseButtonPush)
 # Add a button
 cmds.button( label='Cartoonify', command=CartoonifyButtonPush)
-cmds.floatSliderGrp('float', label='Cartoonification Value', field=True, minValue=0.0, maxValue=1.0, fieldMinValue=0.0, fieldMaxValue=1.0, value=0.5 )
+cmds.floatSliderGrp('float', label='Cartoonification Value', field=True, minValue=-10.0, maxValue=10.0, fieldMinValue=-10.0, fieldMaxValue=10.0, value=0, dc=slider_drag_callback)
 # Add a button
 cmds.button( label='Reset', command=ResetButtonPush)
-
-
 
 # Show the window
 cmds.showWindow( window )
