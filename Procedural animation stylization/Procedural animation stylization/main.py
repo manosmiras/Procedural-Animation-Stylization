@@ -3,11 +3,12 @@ import maya.mel as mel
 import math
 initIW = []
 framesPosed = []
-
+init = True
+next = 0 # Holds the value of the next keyframe
 # https://www.desmos.com/calculator/hamwkcp1rh
 def calculatePos(x, n):
     position = math.pow((1 - math.cos(x)), n)
-    #position = math.pow(math.cos(x), n)
+    #position = (1 - x + 0j) ** n
     #position = math.pow(1 - math.cos(math.pi/2 - x), n)
     return position
 
@@ -55,14 +56,6 @@ def SavePoseButtonPush(*args):
             for i in range(0, len(keyable)):
                 cmds.textField(keyable[i] +"_"+ str(int(cmds.currentTime( query=True ))), edit = True, text = str(cmds.getAttr(cmds.ls(sl=1)[0] + "." + keyable[i])))
 
-def CartoonifyButtonPush(*args):
-    print("Cartoonifying...")
-    #print(cmds.currentTime( query=True ))
-    #Selects all the keys in the graph editor
-    #cmds.selectKey( cmds.ls(sl=1), time=())
-    #cmds.findKeyframe( timeSlider=True, which="next" )
-    #cmds.keyTangent(cmds.ls(sl=1), edit = True, iw = 10)
-
 def ResetButtonPush(*args):
     print("Resetting the values")
     print(initIW)
@@ -75,22 +68,27 @@ def slider_drag_callback(*args):
     global framesPosed
     print(framesPosed)
     currentKeyFrame = framesPosed[0] #cmds.currentTime( query=True )
-
-    next = cmds.findKeyframe(cmds.ls(sl=1), time=(framesPosed[0],framesPosed[0]), which="next")
+    global next
+    global init
+    if init == True: 
+        next = cmds.findKeyframe(cmds.ls(sl=1), time=(framesPosed[0],framesPosed[0]), which="next")
+        init = False
     #previous = cmds.findKeyframe(cmds.ls(sl=1), time=(framesPosed[0],framesPosed[0]), which="previous")
     #key1 = 0
     #if (len(framesPosed) > 0):
-    #key1 = 20 #(currentKeyFrame + next) / 2
-    #key2 = 22
-    key3 = 24
+    
+    key1 = (currentKeyFrame + next) / 2
+    key2 = (currentKeyFrame + key1) / 2
+    key3 = (key1 + next) / 2
+    print("key1 is: " + str(key1))
+    print("key2 is: " + str(key2))
+    print("key3 is: " + str(key3))
 
-    #print("key1 is: " + str(key1))
-    # Set the inWeights and outWeights of the pose to 0
     valueFromSlider = cmds.floatSliderGrp('float', query=True, value = 1)
-    #print(calculatePos(key1, valueFromSlider))
-    #cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=calculatePos(key1, valueFromSlider), t = (key1, key1), itt = "spline", ott = "spline" )
-    #cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=calculatePos(key2, valueFromSlider), t = (key2, key2), itt = "spline", ott = "spline" )
-    cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=calculatePos(key3, valueFromSlider), t = (key3, key3), itt = "spline", ott = "spline" )
+    # print(calculatePos(key1, valueFromSlider))
+    cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=float(calculatePos(key1, valueFromSlider)), t = (key1, key1), itt = "spline", ott = "spline" )
+    cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=float(calculatePos(key2, valueFromSlider)), t = (key2, key2), itt = "spline", ott = "spline" )
+    cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=float(calculatePos(key3, valueFromSlider)), t = (key3, key3), itt = "spline", ott = "spline" )
     #cmds.setAttr()
     #cmds.keyTangent(cmds.ls(sl=1), edit = True, time = (previous, next), attribute = 'translateY', outWeight = valueFromSlider * 10)
     #cmds.keyTangent(cmds.ls(sl=1), edit = True, time = (previous, next), attribute = 'translateY', inWeight = valueFromSlider * 10)
@@ -104,8 +102,7 @@ cmds.columnLayout( adjustableColumn=True )
 
 # Add a button
 cmds.button( label='Save Pose', command=SavePoseButtonPush)
-# Add a button
-cmds.button( label='Cartoonify', command=CartoonifyButtonPush)
+
 cmds.floatSliderGrp('float', label='Cartoonification Value', field=True, minValue=-10.0, maxValue=10.0, fieldMinValue=-10.0, fieldMaxValue=10.0, value=0, dc=slider_drag_callback)
 # Add a button
 cmds.button( label='Reset', command=ResetButtonPush)
