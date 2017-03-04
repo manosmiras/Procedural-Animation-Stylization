@@ -7,8 +7,12 @@ init = True
 next = 0 # Holds the value of the next keyframe
 # https://www.desmos.com/calculator/hamwkcp1rh
 def calculatePos(x, n):
-    position = math.pow((1 - math.cos(x)), n)
-    #position = (1 - x + 0j) ** n
+    #decimal.normalize(x)
+    #print(str(x))
+    x*=0.01
+    #position = math.pow((1 - math.cos(x)), n)
+    position = (1 - x ) ** n
+    print("x is: " + str(x))
     #position = math.pow(1 - math.cos(math.pi/2 - x), n)
     return position
 
@@ -77,18 +81,19 @@ def slider_drag_callback(*args):
     #key1 = 0
     #if (len(framesPosed) > 0):
     
-    key1 = (currentKeyFrame + next) / 2
-    key2 = (currentKeyFrame + key1) / 2
-    key3 = (key1 + next) / 2
-    print("key1 is: " + str(key1))
-    print("key2 is: " + str(key2))
-    print("key3 is: " + str(key3))
+    # Put keyframe inbetween
+   # key1 = (currentKeyFrame + next) / 2
+    # Put keyframe one after current
+    key2 = currentKeyFrame + 1 #(currentKeyFrame + key1) / 2
+    # Put keyframe one before next
+    key3 = next - 1 #(key1 + next) / 2
 
     valueFromSlider = cmds.floatSliderGrp('float', query=True, value = 1)
+    print("value from slider is: " + str(valueFromSlider))
     # print(calculatePos(key1, valueFromSlider))
-    cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=float(calculatePos(key1, valueFromSlider)), t = (key1, key1), itt = "spline", ott = "spline" )
-    cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=float(calculatePos(key2, valueFromSlider)), t = (key2, key2), itt = "spline", ott = "spline" )
-    cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=float(calculatePos(key3, valueFromSlider)), t = (key3, key3), itt = "spline", ott = "spline" )
+    #cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=calculatePos(key1, valueFromSlider), t = (key1, key1), itt = "spline", ott = "spline" )
+    cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=calculatePos(key2, valueFromSlider), t = (key2, key2), itt = "spline", ott = "spline" )
+    cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=calculatePos(key3, valueFromSlider), t = (key3, key3), itt = "spline", ott = "spline" )
     #cmds.setAttr()
     #cmds.keyTangent(cmds.ls(sl=1), edit = True, time = (previous, next), attribute = 'translateY', outWeight = valueFromSlider * 10)
     #cmds.keyTangent(cmds.ls(sl=1), edit = True, time = (previous, next), attribute = 'translateY', inWeight = valueFromSlider * 10)
