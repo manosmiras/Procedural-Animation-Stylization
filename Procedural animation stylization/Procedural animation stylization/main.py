@@ -7,16 +7,20 @@ nextLoop = []
 next = [] # Holds the value of the next keyframe
 keyable = []
 # https://www.desmos.com/calculator/hamwkcp1rh
-def calculatePos(x, n):
+def CalculatePos(x, n):
     #decimal.normalize(x)
     #print(str(x))
-    x*=0.01
+    #x*=0.01
     #position = math.pow((1 - math.cos(x)), n)
-    #position = (1 - x ) ** n
-    position = 0.9 ** n
+    position = (1 - x ) ** n
+    #position = 0.9 ** n
     print("x is: " + str(x))
     #position = math.pow(1 - math.cos(math.pi/2 - x), n)
     return position
+
+def NormalizeKey(interpolationKeyframe, firstKeyFrame, lastKeyFrame):
+    return (interpolationKeyframe - firstKeyFrame) / (lastKeyFrame - firstKeyFrame)
+    #return interpolationKeyframe * (lastKeyFrame - firstKeyFrame) + firstKeyFrame
 
 def SavePoseButtonPush(*args):
     
@@ -82,36 +86,59 @@ def slider_drag_callback(*args):
             if init[i] == True: 
                 next.insert(i, cmds.findKeyframe(cmds.ls(sl=1), time=(currentKeyFrame,currentKeyFrame), which="next"))
                 init[i] = False
-
+            global keyable
             # Go through each keyable attribute
             for attribute in range(0, len(keyable)):
                 # For each check box that is checked
                 if cmds.checkBox(keyable[attribute] + str(int(framesPosed[i])), q = True, value = True) == True:
-                    global keyable
-                    print(keyable)
+                    
+                    #print(keyable)
                     # Get value of currentKeyFrame
                     currentKeyFrameVal = cmds.keyframe(cmds.ls(sl=1), q = True, vc = 1, t = (currentKeyFrame, currentKeyFrame), at = keyable[attribute])
                     nextKeyFrameVal = cmds.keyframe(cmds.ls(sl=1), q = True, vc = 1, t = (next[i], next[i]), at = keyable[attribute])
                     distance = nextKeyFrameVal[0] - currentKeyFrameVal[0]
                     #print(currentKeyFrameVal)
 
-                    key1 = (currentKeyFrame + 1)
+                    
                     # Put keyframe one after current
                     key2 = (currentKeyFrame + next[i]) / 2 #currentKeyFrame + 1 #(currentKeyFrame + key1) / 2
+                    key1 = (currentKeyFrame + key2) / 2
                     # Put keyframe one before next
-                    key3 = next[i] - 1 #(key1 + next) / 2
+                    key3 = (key2 + next[i]) / 2
 
                     valueFromSlider = cmds.floatSliderGrp('float', query=True, value = 1)
-                    print("value from slider is: " + str(valueFromSlider))
+                    #print("value from slider is: " + str(valueFromSlider))
+                    print("key1 is: " + str(key1), ", normalized: " + str(NormalizeKey(key1, currentKeyFrame, next[i])))
+                    print("key2 is: " + str(key2), ", normalized: " + str(NormalizeKey(key2, currentKeyFrame, next[i])))
+                    print("key3 is: " + str(key3), ", normalized: " + str(NormalizeKey(key3, currentKeyFrame, next[i])))
+                   
+                    # Normalize the keyframes
+                    normalKey1 = NormalizeKey(key1, currentKeyFrame, next[i])
+                    normalKey2 = NormalizeKey(key2, currentKeyFrame, next[i])
+                    normalKey3 = NormalizeKey(key3, currentKeyFrame, next[i])
 
-                    if distance > 0:
-                        cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=calculatePos(key1, valueFromSlider) * distance - distance / 1.5, t = (key1, key1), itt = "spline", ott = "spline" )
-                        cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=calculatePos(key2, valueFromSlider) * distance - distance / 3, t = (key2, key2), itt = "spline", ott = "spline" )
-                        cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=calculatePos(key3, valueFromSlider) * distance - distance / 4, t = (key3, key3), itt = "spline", ott = "spline" )
-                    else:
-                        cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=calculatePos(key1, valueFromSlider) * (-distance) + distance / 4, t = (key1, key1), itt = "spline", ott = "spline" )
-                        cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=calculatePos(key2, valueFromSlider) * (-distance) + distance / 3, t = (key2, key2), itt = "spline", ott = "spline" )
-                        cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=calculatePos(key3, valueFromSlider) * (-distance) + distance / 1.5, t = (key3, key3), itt = "spline", ott = "spline" )
+                    # Set the keyframe values (For some reason, adding the value of normalKey3 as an input value to the CalculatePos function, 
+                    # for the frame key1 and vice versa, makes the system behave in the way originally expected.)
+                    cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=currentKeyFrameVal[0] + CalculatePos(normalKey3, valueFromSlider) * distance, t = (key1, key1), itt = "spline", ott = "spline" )
+                    cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=currentKeyFrameVal[0] + CalculatePos(normalKey2, valueFromSlider) * distance, t = (key2, key2), itt = "spline", ott = "spline" )
+                    cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=currentKeyFrameVal[0] + CalculatePos(normalKey1, valueFromSlider) * distance, t = (key3, key3), itt = "spline", ott = "spline" )
+
+                    #if distance > 0:
+                        #cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=CalculatePos(key1, valueFromSlider) * distance - distance / 1.5, t = (key1, key1), itt = "spline", ott = "spline" )
+                        #cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=CalculatePos(key2, valueFromSlider) * distance - distance / 3, t = (key2, key2), itt = "spline", ott = "spline" )
+                        #cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=CalculatePos(key3, valueFromSlider) * distance - distance / 4, t = (key3, key3), itt = "spline", ott = "spline" )
+                        
+                         
+                        #cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=currentKeyFrameVal[0] + CalculatePos(normalKey3, valueFromSlider) * distance, t = (key1, key1), itt = "spline", ott = "spline" )
+                        #cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=currentKeyFrameVal[0] + CalculatePos(normalKey2, valueFromSlider) * distance, t = (key2, key2), itt = "spline", ott = "spline" )
+                        #cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=currentKeyFrameVal[0] + CalculatePos(normalKey1, valueFromSlider) * distance, t = (key3, key3), itt = "spline", ott = "spline" )
+                   #else:
+                        #cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=CalculatePos(key1, valueFromSlider) * (-distance) + distance / 4, t = (key1, key1), itt = "spline", ott = "spline" )
+                        #cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=CalculatePos(key2, valueFromSlider) * (-distance) + distance / 3, t = (key2, key2), itt = "spline", ott = "spline" )
+                        #cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=CalculatePos(key3, valueFromSlider) * (-distance) + distance / 1.5, t = (key3, key3), itt = "spline", ott = "spline" )
+                        #cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=currentKeyFrameVal[0] + CalculatePos(normalKey1, valueFromSlider) * (distance), t = (key1, key1), itt = "spline", ott = "spline" )
+                        #cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=currentKeyFrameVal[0] + CalculatePos(normalKey2, valueFromSlider) * (distance), t = (key2, key2), itt = "spline", ott = "spline" )
+                        #cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=currentKeyFrameVal[0] + CalculatePos(normalKey3, valueFromSlider) * (distance), t = (key3, key3), itt = "spline", ott = "spline" )
                         #cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=calculatePos(key2, valueFromSlider) * (-distance), t = (key2, key2), itt = "spline", ott = "spline" )
                         #cmds.setKeyframe( cmds.ls(sl=1), at = 'translateY', v=calculatePos(key3, valueFromSlider) * (-distance) - (currentKeyFrameVal[0] - distance)/4, t = (key3, key3), itt = "spline", ott = "spline" )
 
@@ -123,7 +150,7 @@ cmds.columnLayout( adjustableColumn=True )
 # Add a button
 cmds.button( label='Save Pose', command=SavePoseButtonPush)
 
-cmds.floatSliderGrp('float', label='Stylization Value', field=True, minValue=-10.0, maxValue=10.0, fieldMinValue=-10.0, fieldMaxValue=10.0, value=0, dc=slider_drag_callback)
+cmds.floatSliderGrp('float', label='Stylization Value', field=True, minValue=0.0, maxValue=30.0, fieldMinValue=0.0, fieldMaxValue=30.0, value=0, dc=slider_drag_callback)
 
 # Show the window
 cmds.showWindow( window )
