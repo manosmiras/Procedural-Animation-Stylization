@@ -24,7 +24,25 @@ def NormalizeKey(interpolationKeyframe, firstKeyFrame, lastKeyFrame):
     #return interpolationKeyframe * (lastKeyFrame - firstKeyFrame) + firstKeyFrame
 
 def DeleteButtonPush(time, *args):
-    print("time associated with button pressed: " + str(time))
+    global framesPosed
+    global nextLoop
+    # Remove the given frame from the framesPosed list.
+    for i in range(0, len(framesPosed)):
+        if (framesPosed[i] == time):
+            
+            framesPosed.remove(time)
+            #nextLoop.pop(i)
+            print(str(time) + " was removed.")
+
+    # Remove the UI parts
+    cmds.deleteUI('stylize'+ str(int(time)))
+    cmds.deleteUI('delete'+ str(int(time)))
+    # This will also delete the children
+    cmds.deleteUI('pose'+ str(int(time)))
+
+    # TODO: Code to actually remove the keyframes
+
+    #print("time associated with button pressed: " + str(time))
 
 def SavePoseButtonPush(*args):
     
@@ -59,7 +77,7 @@ def SavePoseButtonPush(*args):
             cmds.rowLayout( numberOfColumns=2, adjustableColumn=1)
             cmds.checkBox('stylize' + str(int(cmds.currentTime( query=True ))), label='Stylize', bgc=[0.75,0.7,0.7], v = True )
 
-            cmds.button(label='Delete Pose', bgc=[0.75,0.7,0.7], command = partial(DeleteButtonPush, cmds.currentTime(query=True)))
+            cmds.button('delete' + str(int(cmds.currentTime( query=True ))),label='Delete Pose', bgc=[0.75,0.7,0.7], command = partial(DeleteButtonPush, cmds.currentTime(query=True)))
 
             cmds.setParent( '..' )
             cmds.frameLayout('pose' + str(int(cmds.currentTime( query=True ))), label='Pose at frame: ' + str(cmds.currentTime( query=True )), labelAlign='top', cll = True, cl = True )
