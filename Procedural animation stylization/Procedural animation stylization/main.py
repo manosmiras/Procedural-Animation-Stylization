@@ -1,6 +1,7 @@
 import maya.cmds as cmds
 import maya.mel as mel
 import math
+from functools import partial
 framesPosed = []
 init = []#True
 nextLoop = []
@@ -12,7 +13,7 @@ def CalculatePos(x, n):
     #print(str(x))
     #x*=0.01
     #position = math.pow((1 - math.cos(x)), n)
-    position = (1 - x ) ** n
+    position = (1 - x) ** n
     #position = 0.9 ** n
     print("x is: " + str(x))
     #position = math.pow(1 - math.cos(math.pi/2 - x), n)
@@ -22,13 +23,18 @@ def NormalizeKey(interpolationKeyframe, firstKeyFrame, lastKeyFrame):
     return (interpolationKeyframe - firstKeyFrame) / (lastKeyFrame - firstKeyFrame)
     #return interpolationKeyframe * (lastKeyFrame - firstKeyFrame) + firstKeyFrame
 
+def DeleteButtonPush(time, *args):
+    print("time associated with button pressed: " + str(time))
+
 def SavePoseButtonPush(*args):
     
     # This is the initial inWeight of each Key Tangent
     selected = []
     selected = cmds.ls(sl=1)
+    # User did not select anything, issue warning.
     if len(selected) < 1:
         cmds.warning("No object selected.")
+        cmds.confirmDialog(title="Warning", message = "No object selected.")
     else:
         #print(initIW)
         print("Pose saved...")
@@ -48,9 +54,14 @@ def SavePoseButtonPush(*args):
             framesPosed.insert(len(framesPosed), cmds.currentTime(query=True))
             print(framesPosed)
             #cmds.text( label='Pose at frame: ' + str(cmds.currentTime( query=True )), bgc=[1,0,0])
-            #cmds.button( label='Pose at frame: ' + str(cmds.currentTime( query=True )), command=SavePoseButtonPush)
+            
             #cmds.columnLayout( adjustableColumn=True )
+            cmds.rowLayout( numberOfColumns=2, adjustableColumn=1)
             cmds.checkBox('stylize' + str(int(cmds.currentTime( query=True ))), label='Stylize', bgc=[0.75,0.7,0.7], v = True )
+
+            cmds.button(label='Delete Pose', bgc=[0.75,0.7,0.7], command = partial(DeleteButtonPush, cmds.currentTime(query=True)))
+
+            cmds.setParent( '..' )
             cmds.frameLayout('pose' + str(int(cmds.currentTime( query=True ))), label='Pose at frame: ' + str(cmds.currentTime( query=True )), labelAlign='top', cll = True, cl = True )
             global keyable
             keyable = cmds.listAttr(cmds.ls(sl=1), k=True)
@@ -117,12 +128,16 @@ def slider_drag_callback(*args):
                     normalKey2 = NormalizeKey(key2, currentKeyFrame, next[i])
                     normalKey3 = NormalizeKey(key3, currentKeyFrame, next[i])
 
+                    print("key1 is: " + str(key1))
+                    print("key2 is: " + str(key2))
+                    print("key3 is: " + str(key3))
+
                     # Set the keyframe values (For some reason, adding the value of normalKey3 as an input value to the CalculatePos function, 
                     # for the frame key1 and vice versa, makes the system behave in the way originally expected.)
                     cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=currentKeyFrameVal[0] + CalculatePos(normalKey3, valueFromSlider) * distance, t = (key1, key1), itt = "spline", ott = "spline" )
                     cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=currentKeyFrameVal[0] + CalculatePos(normalKey2, valueFromSlider) * distance, t = (key2, key2), itt = "spline", ott = "spline" )
                     cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=currentKeyFrameVal[0] + CalculatePos(normalKey1, valueFromSlider) * distance, t = (key3, key3), itt = "spline", ott = "spline" )
-
+                    
                     #if distance > 0:
                         #cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=CalculatePos(key1, valueFromSlider) * distance - distance / 1.5, t = (key1, key1), itt = "spline", ott = "spline" )
                         #cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v=CalculatePos(key2, valueFromSlider) * distance - distance / 3, t = (key2, key2), itt = "spline", ott = "spline" )
@@ -144,7 +159,7 @@ def slider_drag_callback(*args):
 
 
 # Make a new window
-window = cmds.window( title="Animation Stylization", iconName='Short Name', widthHeight=(500, 500) )
+window = cmds.window( title="Animation Stylization", iconName='Short Name', widthHeight=(500, 500), sizeable = True)
 # Assign a layout
 cmds.columnLayout( adjustableColumn=True )
 # Add a button
