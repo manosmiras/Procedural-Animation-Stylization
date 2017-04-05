@@ -15,18 +15,74 @@ next = [] # Holds the value of the next keyframe
 keyable = []
 keys = [] # Interpolation keyframes
 normalizedKeys = [] # Interpolation keyframes normalized
+keyframesWithPreAndPost = []
+PreAndPostInbetweenKey = {} # Dictionary containing the inbetween keyframe of a pre and post pose
+
 interpolatingKeysCount = 3
 # https://www.desmos.com/calculator/hamwkcp1rh
-def CalculatePos(x, n):
-    #decimal.normalize(x)
-    #print(str(x))
-    #x*=0.01
-    #position = math.pow((1 - math.cos(x)), n)
-    position = (1 - x) ** n
-    #position = 0.9 ** n
-    #print("x is: " + str(x))
-    #position = math.pow(1 - math.cos(math.pi/2 - x), n)
+def CalculatePos(x, n, reverse):
+    if reverse:
+        # 1 - x ^ n
+        position = 1 - x ** n
+    else:
+        # (1 - x) ^ n
+        position = (1 - x) ** n
+
     return position
+
+def SetKeyframes(currentKeyFrame, nextKeyFrame, attribute, reverse):
+    print(next)
+    # 'Pre' keyframe
+    currentKeyFrameVal = cmds.keyframe(cmds.ls(sl=1), q = True, vc = 1, t = (currentKeyFrame, currentKeyFrame), at = keyable[attribute])
+    # 'Post' keyframe
+    nextKeyFrameVal = cmds.keyframe(cmds.ls(sl=1), q = True, vc = 1, t = (nextKeyFrame, nextKeyFrame), at = keyable[attribute])
+
+    maxY = 0
+    minY = 0
+    # Used for 'de-normalization'
+    maxY = currentKeyFrameVal[0]
+    minY = nextKeyFrameVal[0]
+    
+    global keys
+    global normalizedKeys
+    global interpolatingKeysCount
+    # Set size of lists
+    keys = [None] * interpolatingKeysCount
+    normalizedKeys = [None] * interpolatingKeysCount
+
+    for currentKey in range (0, interpolatingKeysCount):
+        if currentKey == 0:
+            # Middle
+            keys[currentKey] = (currentKeyFrame + nextKeyFrame) / 2
+        else:
+            # Even
+            if currentKey % 2 == 0:
+                # Right side
+                keys[currentKey] = (keys[currentKey - 2] + nextKeyFrame) / 2
+            # Odd
+            else:
+                if currentKey == 1:
+                    # Left side
+                    keys[currentKey] = (currentKeyFrame + keys[currentKey - 1]) / 2
+                else:
+                    keys[currentKey] = (currentKeyFrame + keys[currentKey - 2]) / 2
+            # Normalize
+        normalizedKeys[currentKey] = NormalizeKey(keys[currentKey], currentKeyFrame, nextKeyFrame)
+           
+    #print(normalizedKeys)
+    valueFromSlider = cmds.floatSliderGrp('stylization_val', query=True, value = 1)
+
+    print(valueFromSlider)
+    # Update number of keys specified by slider
+    
+    for currentKey in range (0, interpolatingKeysCount):
+        cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v = CalculatePos(normalizedKeys[currentKey], valueFromSlider, reverse) * (maxY - minY) + minY, t = (keys[currentKey], keys[currentKey]), itt = "spline", ott = "spline" )
+
+    # TODO
+    print("Gonna delete from :" + str(cmds.findKeyframe(cmds.ls(sl=1), at = keyable[attribute], t = (keys[interpolatingKeysCount - 1], keys[interpolatingKeysCount - 1]), which = "next")) + " to " + str(cmds.findKeyframe(cmds.ls(sl=1), at = keyable[attribute], t = (nextKeyFrame, nextKeyFrame), which = "previous")))
+
+    # Should delete right side...
+    #cmds.cutKey(cmds.ls(sl=1), at = keyable[attribute], t = (keys[interpolatingKeysCount - 1], cmds.findKeyframe(next[i], which = "previous")), clear = True)
 
 def NormalizeKey(interpolationKeyframe, firstKeyFrame, lastKeyFrame):
     return (interpolationKeyframe - firstKeyFrame) / (lastKeyFrame - firstKeyFrame)
@@ -84,11 +140,23 @@ def SavePoseButtonPush(PreAndPost, *args):
             theFrames = cmds.timeControl(aPlayBackSliderPython,q=True, rangeArray=True)
 
             if PreAndPost:
+                global init
+                global next
+                
                 # Add the first frame to the array of frames that have been posed
                 framesPosed.insert(len(framesPosed), theFrames[0])
+                # The post keyframe to list of post keyframes
+                init.insert(len(next), False)
+                next.insert(len(next), theFrames[1])
+                keyframesWithPreAndPost.insert(len(keyframesWithPreAndPost), True)
+                # Add keyframe that is between pre and post to dictionary
+                PreAndPostInbetweenKey[theFrames[0]] = cmds.findKeyframe(cmds.ls(sl=1), time=(theFrames[0],theFrames[0]), which="next")
+                #init[len(next)] = False
+
             else:
                 # Add current frame to the array of frames that have been posed
                 framesPosed.insert(len(framesPosed), cmds.currentTime(query=True))
+                keyframesWithPreAndPost.insert(len(keyframesWithPreAndPost), False)
 
             cmds.rowLayout( numberOfColumns=2, adjustableColumn=1)
 
@@ -97,11 +165,11 @@ def SavePoseButtonPush(PreAndPost, *args):
             else:
                 # Get the current frame, remove '.' from float to use as UI names
                 frameNumber = str(cmds.currentTime( query=True )).replace(".", "")
-            
+            # Checkbox to determine if pose will be stylized
             cmds.checkBox('stylize' + frameNumber, label='Stylize', bgc=[0.75,0.7,0.7], v = True )
-
+            # Add delete button
             cmds.button('delete' + frameNumber, label='Delete Pose', bgc=[0.75,0.7,0.7], command = partial(DeleteButtonPush, cmds.currentTime(query=True)))
-
+            
             cmds.setParent( '..' )
             if PreAndPost:
                 cmds.frameLayout('pose' + frameNumber, label='Pose at frame: ' + str(theFrames[0]), labelAlign='top', cll = True, cl = True )
@@ -146,57 +214,14 @@ def stylization_slider_drag_callback(*args):
             for attribute in range(0, len(keyable)):
                 # For each check box that is checked
                 if cmds.checkBox(keyable[attribute] + str(framesPosed[i]).replace(".", ""), q = True, value = True) == True:
-                    
-                    # 'Pre' keyframe
-                    currentKeyFrameVal = cmds.keyframe(cmds.ls(sl=1), q = True, vc = 1, t = (currentKeyFrame, currentKeyFrame), at = keyable[attribute])
-                    # 'Post' keyframe
-                    nextKeyFrameVal = cmds.keyframe(cmds.ls(sl=1), q = True, vc = 1, t = (next[i], next[i]), at = keyable[attribute])
+                    #global keyframesWithPreAndPost
+                    if keyframesWithPreAndPost[i]: 
+                        # Set both
+                        SetKeyframes(currentKeyFrame, PreAndPostInbetweenKey[currentKeyFrame], attribute, True)
+                        SetKeyframes(PreAndPostInbetweenKey[currentKeyFrame], next[i], attribute, False)
 
-                    maxY = 0
-                    minY = 0
-                    # Used for 'de-normalization'
-                    maxY = currentKeyFrameVal[0]
-                    minY = nextKeyFrameVal[0]
-    
-                    global keys
-                    global normalizedKeys
-                    global interpolatingKeysCount
-                    # Set size of lists
-                    keys = [None] * interpolatingKeysCount
-                    normalizedKeys = [None] * interpolatingKeysCount
-
-                    for currentKey in range (0, interpolatingKeysCount):
-                        if currentKey == 0:
-                            # Middle
-                            keys[currentKey] = (currentKeyFrame + next[i]) / 2
-                        else:
-                            # Even
-                            if currentKey % 2 == 0:
-                                # Right side
-                                keys[currentKey] = (keys[currentKey - 2] + next[i]) / 2
-                            # Odd
-                            else:
-                                if currentKey == 1:
-                                    # Left side
-                                    keys[currentKey] = (currentKeyFrame + keys[currentKey - 1]) / 2
-                                else:
-                                    keys[currentKey] = (currentKeyFrame + keys[currentKey - 2]) / 2
-                            # Normalize
-                        normalizedKeys[currentKey] = NormalizeKey(keys[currentKey], currentKeyFrame, next[i])
-                           
-                    #print(normalizedKeys)
-
-                    valueFromSlider = cmds.floatSliderGrp('stylization_val', query=True, value = 1)
-
-                    # Update number of keys specified by slider
-                    for currentKey in range (0, interpolatingKeysCount):
-                        cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v = CalculatePos(normalizedKeys[currentKey], valueFromSlider) * (maxY - minY) + minY, t = (keys[currentKey], keys[currentKey]), itt = "spline", ott = "spline" )
-
-                    # TODO
-                    print("Gonna delete from :" + str(cmds.findKeyframe(cmds.ls(sl=1), at = keyable[attribute], t = (keys[interpolatingKeysCount - 1], keys[interpolatingKeysCount - 1]), which = "next")) + " to " + str(cmds.findKeyframe(cmds.ls(sl=1), at = keyable[attribute], t = (next[i], next[i]), which = "previous")))
-
-                    # Should delete right side...
-                    #cmds.cutKey(cmds.ls(sl=1), at = keyable[attribute], t = (keys[interpolatingKeysCount - 1], cmds.findKeyframe(next[i], which = "previous")), clear = True)
+                    else:
+                         SetKeyframes(currentKeyFrame, next[i], attribute, False)
 
 def interpolation_slider_drag_callback(*args):
     # Update value
@@ -211,8 +236,9 @@ cmds.columnLayout( adjustableColumn=True )
 cmds.button( label='Save Pose using one keyframe only', command=partial(SavePoseButtonPush, False))
 # Add save button for pre and post
 cmds.button( label='Save Pose using range of keyframes', command=partial(SavePoseButtonPush, True))
-
+# Stylization slider
 cmds.floatSliderGrp('stylization_val', label='Stylization Value', field=True, minValue=0.0, maxValue=30.0, fieldMinValue=0.0, fieldMaxValue=30.0, value=0, dc=stylization_slider_drag_callback)
-cmds.intSliderGrp('interpolation_val', label='Number of interpolating keyframes', field=True, minValue=3, maxValue=30, fieldMinValue=3, fieldMaxValue=30, value=3, dc=interpolation_slider_drag_callback)
+# Number of interpolating keyframes slider
+cmds.intSliderGrp('interpolation_val', label='Interpolating keyframes', field=True, minValue=3, maxValue=30, fieldMinValue=3, fieldMaxValue=30, value=3, dc=interpolation_slider_drag_callback)
 # Show the window
 cmds.showWindow( window )
