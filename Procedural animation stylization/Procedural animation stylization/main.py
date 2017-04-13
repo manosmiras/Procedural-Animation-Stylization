@@ -1,10 +1,14 @@
+# This piece of code allows to procedurally stylize the curves of an animation using a simple GUI.
+# Developed by Emmanuel Miras
+# http://miras.uk/ | https://github.com/prezolov
+
 import maya.cmds as cmds
 import maya.mel as mel
-import math
+# partial is imported to allow for passing arguments to callbacks
 from functools import partial
 
-# TODO: Add post frame when selecting range from timeslider, to next[] list (Half works right now)
 # TODO: Dynamic deletion of interpolating keyframes
+# TODO: Deletion of keyframes when pose on GUI is deleted
 # TODO: General bug-fixing
 
 # Global variables
@@ -20,10 +24,13 @@ PreAndPostInbetweenKey = {} # Dictionary containing the inbetween keyframe of a 
 
 interpolatingKeysCount = 3
 # https://www.desmos.com/calculator/hamwkcp1rh
+# Calculates the position of a keyframe on the Y - Axis (Height)
 def CalculatePos(x, n, reverse):
+    # Reverse curve
     if reverse:
         # 1 - x ^ n
         position = 1 - x ** n
+    # Normal curve
     else:
         # (1 - x) ^ n
         position = (1 - x) ** n
@@ -42,7 +49,8 @@ def SetKeyframes(currentKeyFrame, nextKeyFrame, attribute, reverse):
     # Used for 'de-normalization'
     maxY = currentKeyFrameVal[0]
     minY = nextKeyFrameVal[0]
-    
+    print(maxY)
+    print(minY)
     global keys
     global normalizedKeys
     global interpolatingKeysCount
@@ -52,7 +60,7 @@ def SetKeyframes(currentKeyFrame, nextKeyFrame, attribute, reverse):
 
     for currentKey in range (0, interpolatingKeysCount):
         if currentKey == 0:
-            # Middle
+            # Middle keyframe
             keys[currentKey] = (currentKeyFrame + nextKeyFrame) / 2
         else:
             # Even
@@ -66,17 +74,28 @@ def SetKeyframes(currentKeyFrame, nextKeyFrame, attribute, reverse):
                     keys[currentKey] = (currentKeyFrame + keys[currentKey - 1]) / 2
                 else:
                     keys[currentKey] = (currentKeyFrame + keys[currentKey - 2]) / 2
-            # Normalize
+        # Normalize
         normalizedKeys[currentKey] = NormalizeKey(keys[currentKey], currentKeyFrame, nextKeyFrame)
-           
-    #print(normalizedKeys)
+
+    # Get value from slider
     valueFromSlider = cmds.floatSliderGrp('stylization_val', query=True, value = 1)
 
-    print(valueFromSlider)
-    # Update number of keys specified by slider
-    
+    # Position all keys appropriately
     for currentKey in range (0, interpolatingKeysCount):
+        # Set the key position
         cmds.setKeyframe( cmds.ls(sl=1), at = keyable[attribute], v = CalculatePos(normalizedKeys[currentKey], valueFromSlider, reverse) * (maxY - minY) + minY, t = (keys[currentKey], keys[currentKey]), itt = "spline", ott = "spline" )
+        # Make sure the tangents are always spline based
+        cmds.keyTangent( cmds.ls(sl=1), edit=True, time=(keys[currentKey], keys[currentKey]), at = keyable[attribute],  itt = "spline", ott = "spline")
+        if reverse:
+            if (currentKey == interpolatingKeysCount - 2 and cmds.setKeyframe(cmds.ls(sl=1), at = True, query = True, v = 1) < 0.1):
+                # Set the most left keyframe tangent to a certain angle and weight to avoid a rough curve
+                cmds.keyTangent( cmds.ls(sl=1), edit=True, time=(keys[currentKey], keys[currentKey]), at = keyable[attribute], outAngle=0, outWeight=0, inAngle=0, inWeight=0 )
+        else:
+            if (currentKey == interpolatingKeysCount - 1 and cmds.setKeyframe(cmds.ls(sl=1), at = True, query = True, v = 1) < 0.1):
+                # Set the most right keyframe tangent to a certain angle and weight to avoid a rough curve
+                cmds.keyTangent( cmds.ls(sl=1), edit=True, time=(keys[currentKey], keys[currentKey]), at = keyable[attribute], outAngle=0, outWeight=0, inAngle=0, inWeight=0 )
+            
+           
 
     # TODO
     print("Gonna delete from :" + str(cmds.findKeyframe(cmds.ls(sl=1), at = keyable[attribute], t = (keys[interpolatingKeysCount - 1], keys[interpolatingKeysCount - 1]), which = "next")) + " to " + str(cmds.findKeyframe(cmds.ls(sl=1), at = keyable[attribute], t = (nextKeyFrame, nextKeyFrame), which = "previous")))
@@ -109,6 +128,7 @@ def DeleteButtonPush(time, *args):
 
     #print("time associated with button pressed: " + str(time))
 
+# Save button callback
 def SavePoseButtonPush(PreAndPost, *args):
     print(PreAndPost)
 
@@ -172,7 +192,7 @@ def SavePoseButtonPush(PreAndPost, *args):
             
             cmds.setParent( '..' )
             if PreAndPost:
-                cmds.frameLayout('pose' + frameNumber, label='Pose at frame: ' + str(theFrames[0]), labelAlign='top', cll = True, cl = True )
+                cmds.frameLayout('pose' + frameNumber, label='Pose at frame: ' + str(theFrames[0]) + " - " + str(theFrames[1]), labelAlign='top', cll = True, cl = True )
             else:
                 cmds.frameLayout('pose' + frameNumber, label='Pose at frame: ' + str(cmds.currentTime( query=True )), labelAlign='top', cll = True, cl = True )
             global keyable
@@ -190,7 +210,7 @@ def SavePoseButtonPush(PreAndPost, *args):
             for i in range(0, len(keyable)):
                 cmds.textField(keyable[i] +"_"+ frameNumber, edit = True, text = str(cmds.getAttr(cmds.ls(sl=1)[0] + "." + keyable[i])))
         cmds.setParent( '..' )
-    
+# stylization_val slider callback
 def stylization_slider_drag_callback(*args):
     #print("Slider Dragged")
     global framesPosed
@@ -219,11 +239,11 @@ def stylization_slider_drag_callback(*args):
                         # Set both
                         SetKeyframes(currentKeyFrame, PreAndPostInbetweenKey[currentKeyFrame], attribute, True)
                         SetKeyframes(PreAndPostInbetweenKey[currentKeyFrame], next[i], attribute, False)
-
                     else:
                          SetKeyframes(currentKeyFrame, next[i], attribute, False)
-
+# interpolation_val slider callback
 def interpolation_slider_drag_callback(*args):
+    # Changes the number of interpolating keyframes
     # Update value
     global interpolatingKeysCount
     interpolatingKeysCount = cmds.intSliderGrp('interpolation_val', query=True, value = 3)
@@ -236,9 +256,9 @@ cmds.columnLayout( adjustableColumn=True )
 cmds.button( label='Save Pose using one keyframe only', command=partial(SavePoseButtonPush, False))
 # Add save button for pre and post
 cmds.button( label='Save Pose using range of keyframes', command=partial(SavePoseButtonPush, True))
-# Stylization slider
-cmds.floatSliderGrp('stylization_val', label='Stylization Value', field=True, minValue=0.0, maxValue=30.0, fieldMinValue=0.0, fieldMaxValue=30.0, value=0, dc=stylization_slider_drag_callback)
+# Stylization slider, range = (0 - 5), step = 0.01 
+cmds.floatSliderGrp('stylization_val', label='Stylization Value', field=True, minValue=0.0, maxValue=5.0, fieldMinValue=0.0, fieldMaxValue=5.0, step = 0.01, value=0, dc=stylization_slider_drag_callback)
 # Number of interpolating keyframes slider
-cmds.intSliderGrp('interpolation_val', label='Interpolating keyframes', field=True, minValue=3, maxValue=30, fieldMinValue=3, fieldMaxValue=30, value=3, dc=interpolation_slider_drag_callback)
+cmds.intSliderGrp('interpolation_val', label='Interpolating keyframes', field=True, minValue=3, maxValue=20, fieldMinValue=3, fieldMaxValue=20, value=3, dc=interpolation_slider_drag_callback)
 # Show the window
 cmds.showWindow( window )
