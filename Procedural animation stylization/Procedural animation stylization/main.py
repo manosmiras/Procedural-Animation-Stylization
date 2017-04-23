@@ -8,7 +8,6 @@ import maya.mel as mel
 from functools import partial
 
 # TODO: Dynamic deletion of interpolating keyframes
-# TODO: Deletion of keyframes when pose on GUI is deleted
 # TODO: General bug-fixing
 
 # Global variables
@@ -110,10 +109,20 @@ def NormalizeKey(interpolationKeyframe, firstKeyFrame, lastKeyFrame):
 def DeleteButtonPush(time, *args):
     global framesPosed
     global nextLoop
+    global keys
+    
+
     # Remove the given frame from the framesPosed list.
     for i in range(0, len(framesPosed)):
         if (framesPosed[i] == time):
             
+            # Removes interpolating keyframes
+            nextKeyframe = time
+            for keyToDelete in range(0, len(keys)):
+                nextKeyframe = cmds.findKeyframe(cmds.ls(sl=1), time=(time,time), which="next")
+                cmds.cutKey(cmds.ls(sl=1), time=(nextKeyframe, nextKeyframe))
+
+            # Remove from framesPosed list
             framesPosed.remove(time)
             #nextLoop.pop(i)
             print(str(time) + " was removed.")
@@ -124,7 +133,7 @@ def DeleteButtonPush(time, *args):
     # This will also delete the children
     cmds.deleteUI('pose'+ str(time).replace(".", ""))
 
-    # TODO: Code to actually remove the keyframes
+    
 
     #print("time associated with button pressed: " + str(time))
 
