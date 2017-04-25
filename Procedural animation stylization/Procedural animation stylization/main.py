@@ -4,24 +4,20 @@
 
 import maya.cmds as cmds
 import maya.mel as mel
+import math
 # partial is imported to allow for passing arguments to callbacks
 from functools import partial
 
-# TODO: Dynamic deletion of interpolating keyframes
-# TODO: General bug-fixing
-
 # Global variables
-framesPosed = []
-init = [] # True
-nextLoop = []
+framesPosed = [] # Used to keep track of poses
+init = [] # List of initialized 'post' or next keyframes, used along with the next list
 next = [] # Holds the value of the next keyframe
-keyable = []
+keyable = [] # List of keyable attributes
 keys = [] # Interpolation keyframes
 normalizedKeys = [] # Interpolation keyframes normalized
-keyframesWithPreAndPost = []
+keyframesWithPreAndPost = [] # Used to track if a keyframe is part of a pose created using the range slider or just 1 keyframe
 PreAndPostInbetweenKey = {} # Dictionary containing the inbetween keyframe of a pre and post pose
-
-interpolatingKeysCount = 3
+interpolatingKeysCount = 3 # Number of interpolating keys currently tracked
 # https://www.desmos.com/calculator/hamwkcp1rh
 # Calculates the position of a keyframe on the Y - Axis (Height)
 def CalculatePos(x, n, reverse):
@@ -35,7 +31,7 @@ def CalculatePos(x, n, reverse):
         position = (1 - x) ** n
 
     return position
-
+# Used to set/adjust the position (on Y-Axis) of interpolating keyframes
 def SetKeyframes(currentKeyFrame, nextKeyFrame, attribute, reverse):
     print(next)
     # 'Pre' keyframe
@@ -93,49 +89,101 @@ def SetKeyframes(currentKeyFrame, nextKeyFrame, attribute, reverse):
             if (currentKey == interpolatingKeysCount - 1 and cmds.setKeyframe(cmds.ls(sl=1), at = True, query = True, v = 1) < 0.1):
                 # Set the most right keyframe tangent to a certain angle and weight to avoid a rough curve
                 cmds.keyTangent( cmds.ls(sl=1), edit=True, time=(keys[currentKey], keys[currentKey]), at = keyable[attribute], outAngle=0, outWeight=0, inAngle=0, inWeight=0 )
-            
-           
-
-    # TODO
-    print("Gonna delete from :" + str(cmds.findKeyframe(cmds.ls(sl=1), at = keyable[attribute], t = (keys[interpolatingKeysCount - 1], keys[interpolatingKeysCount - 1]), which = "next")) + " to " + str(cmds.findKeyframe(cmds.ls(sl=1), at = keyable[attribute], t = (nextKeyFrame, nextKeyFrame), which = "previous")))
-
-    # Should delete right side...
-    #cmds.cutKey(cmds.ls(sl=1), at = keyable[attribute], t = (keys[interpolatingKeysCount - 1], cmds.findKeyframe(next[i], which = "previous")), clear = True)
-
+    # Get the number of inbetween keys
+    keysInbetween = cmds.keyframe( cmds.ls(sl=1), attribute=keyable[attribute], query=True, keyframeCount=True, t = (currentKeyFrame, nextKeyFrame)) - 2
+    # Number of keys to remove
+    keysToRemove = keysInbetween - interpolatingKeysCount
+    # Remove extra interpolating keys
+    for currentKey in range (0, keysToRemove):
+        # interpolatingKeysCount is an even number
+        if (interpolatingKeysCount % 2 == 0):
+            # keysToRemove is an even number
+            if (currentKey % 2 == 0):
+                # Delete right key
+                # print("Delete right key")
+                # Gets the far right key, which is to the left(previous) of the post key
+                rightKey = cmds.findKeyframe(cmds.ls(sl=1), time=(nextKeyFrame,nextKeyFrame), which="previous")
+                cmds.cutKey(cmds.ls(sl=1), time=(rightKey, rightKey))
+            # keysToRemove is an odd number
+            else:
+                # Delete left key
+                # print("Delete left key")
+                # Gets the far left key, which is to the right(next) of the pre key
+                leftKey = cmds.findKeyframe(cmds.ls(sl=1), time=(currentKeyFrame,currentKeyFrame), which="next")
+                cmds.cutKey(cmds.ls(sl=1), time=(leftKey, leftKey))
+        # interpolatingKeysCount is an odd number
+        else:
+            if (currentKey % 2 == 0):
+                # Delete left key
+                # print("Delete left key")
+                # Gets the far left key, which is to the right(next) of the pre key
+                leftKey = cmds.findKeyframe(cmds.ls(sl=1), time=(currentKeyFrame,currentKeyFrame), which="next")
+                cmds.cutKey(cmds.ls(sl=1), time=(leftKey, leftKey))
+            # keysToRemove is an odd number
+            else:
+                # Delete right key
+                # print("Delete right key")
+                # Gets the far right key, which is to the left(previous) of the post key
+                rightKey = cmds.findKeyframe(cmds.ls(sl=1), time=(nextKeyFrame,nextKeyFrame), which="previous")
+                cmds.cutKey(cmds.ls(sl=1), time=(rightKey, rightKey))
+# Normalizes a key
 def NormalizeKey(interpolationKeyframe, firstKeyFrame, lastKeyFrame):
     return (interpolationKeyframe - firstKeyFrame) / (lastKeyFrame - firstKeyFrame)
-    #return interpolationKeyframe * (lastKeyFrame - firstKeyFrame) + firstKeyFrame
-
+# Callback for deleting the UI and interpolating keyframes related to a pose
 def DeleteButtonPush(time, *args):
     global framesPosed
-    global nextLoop
     global keys
-    
-
-    # Remove the given frame from the framesPosed list.
-    for i in range(0, len(framesPosed)):
-        if (framesPosed[i] == time):
-            
-            # Removes interpolating keyframes
-            nextKeyframe = time
-            for keyToDelete in range(0, len(keys)):
+    global next
+    global init
+    # Make copy of list so elements can be dynamically removed as iterating through it.
+    framesPosedCopy = list(framesPosed)
+    for i in range(0, len(framesPosedCopy)):
+        #print(len(framesPosed))
+        #print(i)
+        if (framesPosedCopy[i] == time):
+            # Pose was set using range slider
+            if keyframesWithPreAndPost[i]:
+                nextKeyframe = time
+                # Delete left hand side
+                for keyToDelete in range(0, len(keys)):
+                    nextKeyframe = cmds.findKeyframe(cmds.ls(sl=1), time=(time,time), which="next")
+                    cmds.cutKey(cmds.ls(sl=1), time=(nextKeyframe, nextKeyframe))
+                # Get next keyframe, but will be ignored, this is the middle keyframe
                 nextKeyframe = cmds.findKeyframe(cmds.ls(sl=1), time=(time,time), which="next")
-                cmds.cutKey(cmds.ls(sl=1), time=(nextKeyframe, nextKeyframe))
+                # Delete right hand side
+                for keyToDelete in range(0, len(keys)):
+                    nextKeyframe = cmds.findKeyframe(cmds.ls(sl=1), time=(nextKeyframe,nextKeyframe), which="next")
+                    cmds.cutKey(cmds.ls(sl=1), time=(nextKeyframe, nextKeyframe))
 
-            # Remove from framesPosed list
-            framesPosed.remove(time)
-            #nextLoop.pop(i)
-            print(str(time) + " was removed.")
+                # Remove from framesPosed list
+                framesPosed.remove(time)
+                print(str(time) + " was removed.")
+            # Pose was set using 1 keyframe
+            else:
+                # Removes interpolating keyframes
+                nextKeyframe = time
+                print("time is: " + str(time))
+                for keyToDelete in range(0, len(keys)):
+                    nextKeyframe = cmds.findKeyframe(cmds.ls(sl=1), time=(time,time), which="next")
+                    cmds.cutKey(cmds.ls(sl=1), time=(nextKeyframe, nextKeyframe))
+
+                # Remove from framesPosed list
+                framesPosed.remove(time)
+                print(str(time) + " was removed.")
+            # Remove instance from list
+            keyframesWithPreAndPost.pop(i)
+            # Remove from next list, make sure list is not empty
+            if len(next) > 0:
+                next.pop(i)
+            # Remove from init list, make sure list is not empty
+            if len(init) > 0:
+                init.pop(i)
 
     # Remove the UI parts
     cmds.deleteUI('stylize'+ str(time).replace(".", ""))
     cmds.deleteUI('delete'+ str(time).replace(".", ""))
     # This will also delete the children
     cmds.deleteUI('pose'+ str(time).replace(".", ""))
-
-    
-
-    #print("time associated with button pressed: " + str(time))
 
 # Save button callback
 def SavePoseButtonPush(PreAndPost, *args):
@@ -154,72 +202,80 @@ def SavePoseButtonPush(PreAndPost, *args):
         
         global framesPosed
         alreadyPosed = False
-        #print("Frames posed: ")
-        #print(framesPosed)
+
         for i in range(0, len(framesPosed)):
             if cmds.currentTime(query=True) == framesPosed[i]:
-                print("This frame has already been posed, updating")
+                print("This frame has already been posed.")
                 alreadyPosed = True
-        
-        if alreadyPosed == False:
+        frameNumber = ""
+        if alreadyPosed == False:  
             # Access time slider
             aPlayBackSliderPython = maya.mel.eval('$tmpVar=$gPlayBackSlider')
             # Get the range the user selected
             print(cmds.timeControl(aPlayBackSliderPython,q=True, rangeArray=True))
             theFrames = cmds.timeControl(aPlayBackSliderPython,q=True, rangeArray=True)
-
-            if PreAndPost:
-                global init
-                global next
-                
-                # Add the first frame to the array of frames that have been posed
-                framesPosed.insert(len(framesPosed), theFrames[0])
-                # The post keyframe to list of post keyframes
-                init.insert(len(next), False)
-                next.insert(len(next), theFrames[1])
-                keyframesWithPreAndPost.insert(len(keyframesWithPreAndPost), True)
-                # Add keyframe that is between pre and post to dictionary
-                PreAndPostInbetweenKey[theFrames[0]] = cmds.findKeyframe(cmds.ls(sl=1), time=(theFrames[0],theFrames[0]), which="next")
-                #init[len(next)] = False
-
-            else:
-                # Add current frame to the array of frames that have been posed
-                framesPosed.insert(len(framesPosed), cmds.currentTime(query=True))
-                keyframesWithPreAndPost.insert(len(keyframesWithPreAndPost), False)
-
-            cmds.rowLayout( numberOfColumns=2, adjustableColumn=1)
-
-            if PreAndPost:
-                frameNumber = str(theFrames[0]).replace(".", "")
-            else:
-                # Get the current frame, remove '.' from float to use as UI names
-                frameNumber = str(cmds.currentTime( query=True )).replace(".", "")
-            # Checkbox to determine if pose will be stylized
-            cmds.checkBox('stylize' + frameNumber, label='Stylize', bgc=[0.75,0.7,0.7], v = True )
-            # Add delete button
-            cmds.button('delete' + frameNumber, label='Delete Pose', bgc=[0.75,0.7,0.7], command = partial(DeleteButtonPush, cmds.currentTime(query=True)))
-            
-            cmds.setParent( '..' )
-            if PreAndPost:
-                cmds.frameLayout('pose' + frameNumber, label='Pose at frame: ' + str(theFrames[0]) + " - " + str(theFrames[1]), labelAlign='top', cll = True, cl = True )
-            else:
-                cmds.frameLayout('pose' + frameNumber, label='Pose at frame: ' + str(cmds.currentTime( query=True )), labelAlign='top', cll = True, cl = True )
-            global keyable
-            keyable = cmds.listAttr(cmds.ls(sl=1), k=True)
-            for i in range(0, len(keyable)):
-                if i == 2:
-                    cmds.checkBox(keyable[i] + frameNumber, label=keyable[i], v = True )
+            if (PreAndPost and (math.fabs(theFrames[0] - theFrames[1]) > 1)) or (not PreAndPost):
+                if PreAndPost and (math.fabs(theFrames[0] - theFrames[1]) > 1):
+                    global init
+                    global next
+                    
+                    # Add the first frame to the array of frames that have been posed
+                    framesPosed.insert(len(framesPosed), theFrames[0])
+                    # The post keyframe to list of post keyframes
+                    init.insert(len(next), False)
+                    next.insert(len(next), theFrames[1])
+                    keyframesWithPreAndPost.insert(len(keyframesWithPreAndPost), True)
+                    # Add keyframe that is between pre and post to dictionary
+                    PreAndPostInbetweenKey[theFrames[0]] = cmds.findKeyframe(cmds.ls(sl=1), time=(theFrames[0],theFrames[0]), which="next")
                 else:
-                    cmds.checkBox(keyable[i] + frameNumber, label=keyable[i], v = False )
-                cmds.textField(keyable[i] +"_"+ frameNumber)
-                cmds.textField(keyable[i] +"_"+ frameNumber, edit = True, enable = False, text = str(cmds.getAttr(cmds.ls(sl=1)[0] + "." + keyable[i])))
+                    # Add current frame to the array of frames that have been posed
+                    framesPosed.insert(len(framesPosed), cmds.currentTime(query=True))
+                    keyframesWithPreAndPost.insert(len(keyframesWithPreAndPost), False)
+                
+                cmds.rowLayout( numberOfColumns=2, adjustableColumn=1)
+                
+                if PreAndPost and (math.fabs(theFrames[0] - theFrames[1]) > 1):
+                    frameNumber = str(theFrames[0]).replace(".", "")
+                else:
+                    # Get the current frame, remove '.' from float to use as UI names
+                    frameNumber = str(cmds.currentTime( query=True )).replace(".", "")
 
-        else:
-            keyable = cmds.listAttr( cmds.ls(sl=1), k=True)  
-            for i in range(0, len(keyable)):
-                cmds.textField(keyable[i] +"_"+ frameNumber, edit = True, text = str(cmds.getAttr(cmds.ls(sl=1)[0] + "." + keyable[i])))
+                # Checkbox to determine if pose will be stylized
+                cmds.checkBox('stylize' + frameNumber, label='Stylize', bgc=[0.75,0.7,0.7], v = True )
+                
+                # Add delete button
+                # The time associated with the pose is passed on differently based on if it was a single or pre and post selection
+                if PreAndPost and (math.fabs(theFrames[0] - theFrames[1]) > 1):
+                    cmds.button('delete' + frameNumber, label='Delete Pose', bgc=[0.75,0.7,0.7], command = partial(DeleteButtonPush,  theFrames[0]))
+                else:
+                    cmds.button('delete' + frameNumber, label='Delete Pose', bgc=[0.75,0.7,0.7], command = partial(DeleteButtonPush, cmds.currentTime(query=True)))
+                
+                cmds.setParent( '..' )
+                if PreAndPost and (math.fabs(theFrames[0] - theFrames[1]) > 1):
+                    cmds.frameLayout('pose' + frameNumber, label='Pose at frame: ' + str(theFrames[0]) + " - " + str(theFrames[1]), labelAlign='top', cll = True, cl = True )
+                else:
+                    cmds.frameLayout('pose' + frameNumber, label='Pose at frame: ' + str(cmds.currentTime( query=True )), labelAlign='top', cll = True, cl = True )
+
+                
+                global keyable
+                keyable = cmds.listAttr(cmds.ls(sl=1), k=True)
+                for i in range(0, len(keyable)):
+                    if i == 2:
+                        cmds.checkBox(keyable[i] + frameNumber, label=keyable[i], v = True )
+                    else:
+                        cmds.checkBox(keyable[i] + frameNumber, label=keyable[i], v = False )
+                    cmds.textField(keyable[i] +"_"+ frameNumber)
+                    cmds.textField(keyable[i] +"_"+ frameNumber, edit = True, enable = False, text = str(cmds.getAttr(cmds.ls(sl=1)[0] + "." + keyable[i])))
+            else:
+                cmds.warning("Make sure you have selected a range of 3 keyframes, using the timeslider: Starting at the 'pre' keyframe, containing a 'middle' keyframe, which will be ignored and ending with the 'post' keyframe.")
+                cmds.confirmDialog(title="Warning", message = "Make sure you have selected a range of 3 keyframes, using the timeslider: Starting at the 'pre' keyframe, containing a 'middle' keyframe, which will be ignored and ending with the 'post' keyframe.")
+            
+        #else:
+            #keyable = cmds.listAttr( cmds.ls(sl=1), k=True)  
+            #for i in range(0, len(keyable)):
+            #    cmds.textField(keyable[i] +"_"+ frameNumber, edit = True, text = str(cmds.getAttr(cmds.ls(sl=1)[0] + "." + keyable[i])))
         cmds.setParent( '..' )
-# stylization_val slider callback
+# Callback for when the stylization slider is moved
 def stylization_slider_drag_callback(*args):
     #print("Slider Dragged")
     global framesPosed
@@ -243,11 +299,12 @@ def stylization_slider_drag_callback(*args):
             for attribute in range(0, len(keyable)):
                 # For each check box that is checked
                 if cmds.checkBox(keyable[attribute] + str(framesPosed[i]).replace(".", ""), q = True, value = True) == True:
-                    #global keyframesWithPreAndPost
+                    # Pose was set using range slider
                     if keyframesWithPreAndPost[i]: 
                         # Set both
                         SetKeyframes(currentKeyFrame, PreAndPostInbetweenKey[currentKeyFrame], attribute, True)
                         SetKeyframes(PreAndPostInbetweenKey[currentKeyFrame], next[i], attribute, False)
+                    # Pose was set with 1 keyframe
                     else:
                          SetKeyframes(currentKeyFrame, next[i], attribute, False)
 # interpolation_val slider callback
